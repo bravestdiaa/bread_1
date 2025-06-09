@@ -1,5 +1,5 @@
 // قم بزيادة رقم الإصدار مع كل تحديث للملفات الرئيسية
-const CACHE_NAME = 'visit-checker-v4'; 
+const CACHE_NAME = 'visit-checker-v5'; 
 const urlsToCache = [
     '/',
     '/index.html'
@@ -14,7 +14,7 @@ self.addEventListener('install', event => {
     );
 });
 
-// إضافة كود لتنظيف الكاش القديم
+// هذا الكود مهم لتنظيف الكاش القديم وضمان عمل التحديثات
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -24,7 +24,6 @@ self.addEventListener('activate', event => {
     })
   );
 });
-
 
 self.addEventListener('fetch', event => {
     event.respondWith(
