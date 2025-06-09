@@ -1,5 +1,5 @@
 // قم بزيادة رقم الإصدار مع كل تحديث للملفات الرئيسية
-const CACHE_NAME = 'visit-checker-v5'; 
+const CACHE_NAME = 'visit-checker-v6'; 
 const urlsToCache = [
     '/',
     '/index.html'
