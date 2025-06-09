@@ -5,10 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>قرار الزيارة</title>
     
-    <!-- ربط ملف الـ Manifest -->
     <link rel="manifest" href="manifest.json">
-    
-    <!-- معلومات أساسية للـ PWA -->
     <meta name="theme-color" content="#ffffff"/>
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
 
@@ -19,61 +16,141 @@
     <style>
         body { font-family: 'Cairo', sans-serif; }
         .highlight-day-name { background-color: #dbeafe; color: #1e3a8a; font-weight: bold; }
-        .highlight-date { background-color: #dbeafe; border: 2px solid #3b82f6; }
-        .selected-date { outline: 2px solid #1e3a8a; outline-offset: -2px; }
-        .info-panel { max-height: 0; overflow: hidden; transition: all 0.5s ease-out; }
-        .info-panel.visible { max-height: 100px; padding-top: 1rem; padding-bottom: 1rem; }
-        #installBtn { display: none; }
+        .highlight-date { box-shadow: inset 0 0 0 2px #3b82f6; } /* إطار داخلي لليوم الحالي */
+        .selected-date { box-shadow: inset 0 0 0 2px #1e3a8a; } /* إطار داخلي لليوم المختار */
+        
+        /* إخفاء الأزرار بشكل افتراضي */
+        #installBtn, #closeAppBtn { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 pb-24">
 
-    <div class="container mx-auto p-4 md:p-6 max-w-4xl text-center">
+    <div class="container mx-auto px-2 sm:px-4 max-w-4xl text-center">
         
-        <header class="mb-6">
-            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">قرار الزيارة اليومي</h1>
-            <p class="text-gray-600 mt-2">انقر على أي يوم في التقويم لمعرفة حالته.</p>
+        <header class="my-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">قرار الزيارة اليومي</h1>
         </header>
 
-        <div id="resultBox" class="p-6 rounded-xl shadow-lg text-white font-bold text-2xl">
+        <!-- صندوق عرض حالة اليوم الحالي -->
+        <div id="resultBox" class="p-4 rounded-xl shadow-lg text-white font-bold text-xl mb-3">
             <p id="resultMessage"></p>
         </div>
+        
+        <!-- صندوق عرض حالة اليوم المختار (مخفي افتراضياً) -->
+        <div id="selectedDayResultBox" class="p-4 rounded-xl shadow-lg text-white font-bold text-xl mb-4" style="display: none;">
+            <p id="selectedDayMessage"></p>
+        </div>
 
-        <div class="mt-10 bg-white p-4 sm:p-6 rounded-xl shadow-md">
-            <h2 id="calendarTitle" class="text-2xl font-bold text-gray-800 mb-4"></h2>
+        <!-- التقويم المدمج -->
+        <div class="mt-4 bg-white p-2 sm:p-4 rounded-xl shadow-md">
+            <h2 id="calendarTitle" class="text-xl font-bold text-gray-800 mb-2"></h2>
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse">
                     <thead id="calendarHead"></thead>
                     <tbody id="calendarBody"></tbody>
                 </table>
             </div>
-            <div id="dayInfoPanel" class="info-panel text-center mt-4 bg-gray-100 rounded-lg">
-                <p id="dayInfoText" class="font-semibold text-gray-700"></p>
-            </div>
         </div>
         
-        <div class="mt-8">
-            <button id="installBtn" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md">
-                تثبيت التطبيق على الجهاز
+        <div class="mt-6 space-y-3">
+            <button id="installBtn" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md">
+                تثبيت التطبيق
+            </button>
+            <button id="closeAppBtn" class="w-full sm:w-auto bg-gray-700 hover:bg-gray-900 text-white font-bold py-2 px-6 rounded-lg shadow-md">
+                إغلاق التطبيق
             </button>
         </div>
+
     </div>
 
     <script>
-        // تسجيل Service Worker من ملف خارجي
+        // --- الإعدادات والتهيئه ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('Service Worker مسجل:', reg))
-                    .catch(err => console.log('فشل تسجيل Service Worker:', err));
+                navigator.serviceWorker.register('/sw.js');
             });
         }
         
-        // بقية كود الجافاسكريبت يبقى كما هو...
         const today = new Date();
         let currentSelectedCell = null;
         let deferredPrompt;
 
+        // --- دوال مساعدة ---
+        function getDayStatus(day) {
+            const category = day % 3;
+            if (category === 1) return { key: 'bad', color: 'bg-red-500', text: 'لا يُنصح بالذهاب فيه.' };
+            if (category === 2) return { key: 'ok', color: 'bg-yellow-500', text: 'يمكن الذهاب فيه، لكن الأفضل الانتظار.' };
+            if (category === 0) return { key: 'good', color: 'bg-green-500', text: 'هو الأفضل للذهاب.' };
+            return { key: 'none', color: '', text: '' };
+        }
+
+        function showDayInfo(dayNumber, cellElement) {
+            const selectedBox = document.getElementById('selectedDayResultBox');
+            const selectedMessage = document.getElementById('selectedDayMessage');
+            
+            const status = getDayStatus(dayNumber);
+            
+            // تحديث رسالة ولون الصندوق
+            selectedMessage.textContent = `موقف يوم ${dayNumber}: ${status.text}`;
+            selectedBox.className = `p-4 rounded-xl shadow-lg text-white font-bold text-xl mb-4 ${status.color}`;
+            selectedBox.style.display = 'block';
+
+            // تحديث التمييز البصري في الجدول
+            if (currentSelectedCell) {
+                currentSelectedCell.classList.remove('selected-date');
+            }
+            cellElement.classList.add('selected-date');
+            currentSelectedCell = cellElement;
+        }
+
+        // --- دوال بناء الواجهة ---
+        function generateCalendar(year, month) {
+            const calendarHead = document.getElementById('calendarHead');
+            const calendarBody = document.getElementById('calendarBody');
+            const calendarTitle = document.getElementById('calendarTitle');
+            const monthNames = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+            const dayNames = ['ح', 'ن', 'ث', 'ر', 'خ', 'ج', 'س']; // أسماء أيام مختصرة
+            calendarTitle.textContent = `تقويم شهر ${monthNames[month]} ${year}`;
+
+            const firstDayOfMonth = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const numWeeks = Math.ceil((firstDayOfMonth + daysInMonth) / 7);
+
+            let headHTML = '<tr><th class="p-1 text-xs border-b"></th>';
+            for (let i = 0; i < numWeeks; i++) {
+                headHTML += `<th class="p-1 text-xs font-medium text-gray-500 border-b">أ${i + 1}</th>`;
+            }
+            headHTML += '</tr>';
+            calendarHead.innerHTML = headHTML;
+            
+            let bodyHTML = '';
+            for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+                let rowHTML = '<tr>';
+                const isTodayRow = (dayIndex === today.getDay() && month === today.getMonth() && year === today.getFullYear());
+                const dayNameClass = isTodayRow ? 'highlight-day-name' : 'bg-gray-50';
+                rowHTML += `<th class="p-1 text-xs border-t font-bold text-gray-700 ${dayNameClass}">${dayNames[dayIndex]}</th>`;
+
+                for (let weekIndex = 0; weekIndex < numWeeks; weekIndex++) {
+                    const dayNumber = (weekIndex * 7) + dayIndex - firstDayOfMonth + 1;
+                    if (dayNumber > 0 && dayNumber <= daysInMonth) {
+                        const isTodayCell = (dayNumber === today.getDate() && month === today.getMonth() && year === today.getFullYear());
+                        const status = getDayStatus(dayNumber);
+                        const highlightClass = isTodayCell ? 'highlight-date' : '';
+                        // تغيير حجم الخلية والخط
+                        rowHTML += `<td class="border-t p-0 h-10 text-xs text-center align-middle cursor-pointer ${status.key}" onclick="showDayInfo(${dayNumber}, this)">
+                                        <div class="w-full h-full flex items-center justify-center ${highlightClass}">${dayNumber}</div>
+                                    </td>`;
+                    } else {
+                        rowHTML += '<td class="border-t h-10 bg-gray-50"></td>';
+                    }
+                }
+                rowHTML += '</tr>';
+                bodyHTML += rowHTML;
+            }
+            calendarBody.innerHTML = bodyHTML;
+        }
+
+        // --- التنفيذ عند تحميل الصفحة ---
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
@@ -82,87 +159,26 @@
             installBtn.addEventListener('click', () => {
                 installBtn.style.display = 'none';
                 deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {
-                    deferredPrompt = null;
-                });
             });
         });
-        
-        // ... (كل دوال الجافاسكريبت الأخرى مثل getDayStatus, generateCalendar, etc.)
-        function getDayStatus(day) {
-            const category = day % 3;
-            if (category === 1) return { bgColor: 'bg-red-100', textColor: 'text-red-800', statusText: 'لا يُنصح بالذهاب فيه.' };
-            if (category === 2) return { bgColor: 'bg-yellow-100', textColor: 'text-yellow-800', statusText: 'يمكن الذهاب فيه، لكن الأفضل الانتظار.' };
-            if (category === 0) return { bgColor: 'bg-green-100', textColor: 'text-green-800', statusText: 'هو الأفضل للذهاب.' };
-            return { bgColor: '', textColor: '', statusText: '' };
-        }
-        function showDayInfo(dayNumber, cellElement) {
-            const infoPanel = document.getElementById('dayInfoPanel');
-            const infoText = document.getElementById('dayInfoText');
-            const { statusText } = getDayStatus(dayNumber);
-            infoText.textContent = `يوم ${dayNumber}: ${statusText}`;
-            infoPanel.classList.add('visible');
-            if (currentSelectedCell) {
-                currentSelectedCell.classList.remove('selected-date');
-            }
-            cellElement.classList.add('selected-date');
-            currentSelectedCell = cellElement;
-        }
-        function generateCalendar(year, month) {
-            const calendarHead = document.getElementById('calendarHead');
-            const calendarBody = document.getElementById('calendarBody');
-            const calendarTitle = document.getElementById('calendarTitle');
-            const monthNames = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-            const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-            calendarTitle.textContent = `تقويم شهر ${monthNames[month]} ${year}`;
-            const firstDayOfMonth = new Date(year, month, 1).getDay();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const numWeeks = Math.ceil((firstDayOfMonth + daysInMonth) / 7);
-            let headHTML = '<tr><th class="p-2 md:p-3 border-b-2 border-gray-300">اليوم</th>';
-            for (let i = 0; i < numWeeks; i++) {
-                headHTML += `<th class="p-2 md:p-3 border-b-2 border-gray-300 text-sm font-bold text-gray-600">أسبوع ${i + 1}</th>`;
-            }
-            headHTML += '</tr>';
-            calendarHead.innerHTML = headHTML;
-            let bodyHTML = '';
-            for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-                let rowHTML = '<tr>';
-                const isTodayRow = (dayIndex === today.getDay() && month === today.getMonth() && year === today.getFullYear());
-                const dayNameClass = isTodayRow ? 'highlight-day-name' : '';
-                rowHTML += `<th class="p-2 md:p-3 border-t text-sm font-bold text-gray-700 ${dayNameClass}">${dayNames[dayIndex]}</th>`;
-                for (let weekIndex = 0; weekIndex < numWeeks; weekIndex++) {
-                    const dayNumber = (weekIndex * 7) + dayIndex - firstDayOfMonth + 1;
-                    if (dayNumber > 0 && dayNumber <= daysInMonth) {
-                        const isTodayCell = (dayNumber === today.getDate() && month === today.getMonth() && year === today.getFullYear());
-                        const status = getDayStatus(dayNumber);
-                        const highlightClass = isTodayCell ? 'highlight-date' : '';
-                        rowHTML += `<td class="border-t p-1 h-14 text-center align-middle cursor-pointer transition-colors ${status.bgColor} ${status.textColor} ${highlightClass}" onclick="showDayInfo(${dayNumber}, this)">
-                                        <div class="w-full h-full flex items-center justify-center">${dayNumber}</div>
-                                    </td>`;
-                    } else {
-                        rowHTML += '<td class="border-t p-2 h-14 bg-gray-50"></td>';
-                    }
-                }
-                rowHTML += '</tr>';
-                bodyHTML += rowHTML;
-            }
-            calendarBody.innerHTML = bodyHTML;
-        }
+
         window.onload = function() {
+            // إظهار زر الإغلاق إذا كان التطبيق مثبتاً
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                document.getElementById('installBtn').style.display = 'none';
+                document.getElementById('closeAppBtn').style.display = 'block';
+            }
+
+            // عرض حالة اليوم الحالي
             const resultBox = document.getElementById('resultBox');
             const resultMessage = document.getElementById('resultMessage');
             const dayOfMonth = today.getDate();
-            const year = today.getFullYear();
-            const month = today.getMonth();
-            const { statusText } = getDayStatus(dayOfMonth);
-            const category = dayOfMonth % 3;
-            let boxColorClass = '';
-            if (category === 1) boxColorClass = 'bg-red-500';
-            else if (category === 2) boxColorClass = 'bg-yellow-500';
-            else boxColorClass = 'bg-green-500';
-            resultMessage.textContent = `اليوم: ${statusText}`;
-            resultBox.className += ' ' + boxColorClass;
-            generateCalendar(year, month);
+            const status = getDayStatus(dayOfMonth);
+            resultMessage.textContent = `اليوم: ${status.text}`;
+            resultBox.className += ' ' + status.color;
+            
+            // إنشاء التقويم
+            generateCalendar(today.getFullYear(), today.getMonth());
         };
     </script>
 </body>
