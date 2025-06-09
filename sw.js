@@ -1,5 +1,5 @@
 // تحديد الملفات التي سيتم تخزينها مؤقتاً
-const CACHE_NAME = 'visit-checker-v1';
+const CACHE_NAME = 'visit-checker-v2';
 const urlsToCache = [
     '/',
     '/index.html',
